@@ -22,13 +22,13 @@ except Exception:  # pragma: no cover - litellm missing in a minimal env
     LITELLM_AVAILABLE = False
 
 if LITELLM_AVAILABLE:
-    # Cache setup must never take LiteLLM down with it: the disk cache needs
-    # the optional `diskcache` package, and a cache failure must not mark
-    # live inference unavailable.
+    # Cache setup must never take LiteLLM down with it: a cache failure must
+    # not mark live inference unavailable. (In-memory cache: current LiteLLM
+    # versions no longer support the old "disk" cache type.)
     try:
         from litellm import Cache
 
-        litellm.cache = Cache(type="disk", disk_cache_dir="/tmp/litellm_disk_cache")
+        litellm.cache = Cache(type="local")
     except Exception:
         pass
 

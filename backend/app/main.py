@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import time
@@ -107,29 +108,62 @@ async def chat(payload: ChatRequest, x_simulate_failure: str | None = Header(def
         return {"session_id": payload.session_id, "reply": cached["reply"], "metadata": metadata}
 
     # --- Live inference with key failover ----------------------------------
+    # Provider demand spikes (e.g. Gemini 503 "high demand") can hit every
+    # key at once but usually clear within seconds, so keys that failed with
+    # a REAL provider error get up to two extra rounds with a short pause.
+    # Simulated failures are never retried - they are deterministic for the
+    # request - so the X-Simulate-Failure hook keeps its exact behaviour.
     simulate = parse_simulate_failure(x_simulate_failure) if settings.enable_failure_simulation else {}
     fallback_attempts = 0
     last_error: ProviderError | None = None
+    simulated_failed: set[int] = set()
+    real_failed: list[int] = []
 
-    for idx, key in enumerate(settings.llm_api_keys):
+    async def attempt(idx: int) -> tuple[str, int, int] | None:
+        nonlocal fallback_attempts, last_error
         key_id = f"key_{idx + 1}"
         simulated_status = simulate.get(key_id, simulate.get("*"))
         if simulated_status is not None:
             fallback_attempts += 1
+            simulated_failed.add(idx)
             last_error = ProviderError(simulated_status, f"simulated failure {simulated_status}")
-            continue
+            return None
         try:
-            reply, input_tokens, output_tokens = await call_with_key(key, full_messages)
+            return await call_with_key(settings.llm_api_keys[idx], full_messages)
         except ProviderError as exc:
             # 429 / quota / 5xx -> fail over to the next key
-            if exc.status in {429, 500, 502, 503} or "quota" in str(exc).lower():
-                fallback_attempts += 1
-                last_error = exc
-                continue
             fallback_attempts += 1
             last_error = exc
-            continue
+            if idx not in real_failed:
+                real_failed.append(idx)
+            return None
 
+    result: tuple[str, int, int] | None = None
+    result_key_id: str | None = None
+
+    for idx in range(len(settings.llm_api_keys)):
+        outcome = await attempt(idx)
+        if outcome is not None:
+            result, result_key_id = outcome, f"key_{idx + 1}"
+            break
+
+    # Retry rounds for real failures only (demand-spike recovery).
+    for pause in (6, 12):
+        if result is not None:
+            break
+        retryable = [i for i in real_failed if i not in simulated_failed]
+        if not retryable:
+            break
+        await asyncio.sleep(pause)
+        real_failed = []
+        for idx in retryable:
+            outcome = await attempt(idx)
+            if outcome is not None:
+                result, result_key_id = outcome, f"key_{idx + 1}"
+                break
+
+    if result is not None:
+        reply, input_tokens, output_tokens = result
         latency_ms = int((time.perf_counter() - start) * 1000)
         metadata = {
             "resolution_source": "LIVE_INFERENCE",
@@ -137,7 +171,7 @@ async def chat(payload: ChatRequest, x_simulate_failure: str | None = Header(def
             "latency_ms": latency_ms,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
-            "key_id": key_id,
+            "key_id": result_key_id,
             "fallback_attempts": fallback_attempts,
         }
         db.cache_put(cache_key, reply, settings.llm_model, input_tokens, output_tokens)

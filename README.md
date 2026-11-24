@@ -157,13 +157,16 @@ shown next to each reply (`meta-source`, `meta-model`, `meta-latency`,
 ## Deployment notes
 
 1. **Backend — Render:** Docker web service built from `backend/Dockerfile`,
-   with env vars `LLM_API_KEYS` (2 Gemini keys), `LLM_MODEL=gemini/gemini-3.6-flash`,
+   with env vars `LLM_API_KEYS` (2 Gemini keys), `LLM_MODEL=gemini/gemini-3.5-flash-lite`,
    `DATABASE_URL=sqlite:////data/app.db`, `ENABLE_FAILURE_SIMULATION=true`,
    `ALLOWED_ORIGINS=*`.
 2. **Frontend — Netlify:** built from `frontend/` (`npm install && npm run build`,
    publish `frontend/dist`), with env `VITE_API_URL` set to the backend URL
    above. Site visibility is public.
-3. Model note: `gemini-2.5-flash` is closed to new Google AI Studio users and
-   `gemini-3.8-flash` was returning 503 "high demand" during deployment, so the
-   verified working model `gemini-3.6-flash` is configured. Live calls on the
-   free tier are slow (~1–3 min); cache hits return in a few milliseconds.
+3. Model note: `gemini-2.5-flash` is closed to new Google AI Studio users,
+   and `gemini-3.6-flash` / `gemini-3.8-flash` repeatedly returned 503
+   "high demand" during deployment evening, so the verified model
+   `gemini-3.5-flash-lite` is configured: live replies in ~1–4 s, cache hits
+   in a few milliseconds. The backend also retries real provider 5xx
+   failures in two extra rounds (6 s / 12 s pauses) to ride out demand
+   spikes; simulated failures are never retried.

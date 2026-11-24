@@ -149,6 +149,12 @@ async def call_with_key(key: str, messages: list[dict]) -> tuple[str, int, int]:
             caching=True,
         )
     except Exception as exc:  # map provider failures to a status for failover
+        # Temporary diagnostics: log the real provider error (keys redacted)
+        # so deployment issues can be seen in the service logs.
+        _msg = str(exc)
+        for _k in settings.llm_api_keys:
+            _msg = _msg.replace(_k, "***KEY***")
+        print(f"LLM_CALL_ERROR type={type(exc).__name__} msg={_msg[:400]}", flush=True)
         text = str(exc).lower()
         status = 503
         if "429" in text or "rate" in text or "quota" in text:

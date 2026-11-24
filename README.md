@@ -5,13 +5,14 @@ for multi-key failover and response caching, with per-request token tracking.
 
 ## 1. Live URLs
 
-- **Frontend:** _Add your Vercel/Netlify URL here after deployment (see Deployment notes below)_
-- **Backend:** _Add your Render/Railway URL here after deployment_
-- **Backend health check:** `<backend-url>/health`
+- **Frontend:** https://lyftr-ai-assignment.netlify.app
+- **Backend:** https://lyftr-ai-assignment-dz6o.onrender.com
+- **Backend health check:** https://lyftr-ai-assignment-dz6o.onrender.com/health
 
-> Deployment is a 10-minute step with your own accounts (instructions at the
-> bottom of this README). Everything else — code, Docker, tests, contract —
-> is complete and verified locally. No real API keys are stored in this repo.
+> Both tiers are deployed and connected: the frontend talks to the backend
+> above, and all endpoints were verified live (live inference, LLM_CACHE hit,
+> key failover via X-Simulate-Failure, and the clean 503 when every key is
+> simulated down). No real API keys are stored in this repo.
 
 ## 2. Run locally
 
@@ -153,16 +154,16 @@ shown next to each reply (`meta-source`, `meta-model`, `meta-latency`,
 
 ---
 
-## Deployment notes (for the submitter)
+## Deployment notes
 
-1. **Backend — Render/Railway/Fly.io:** create a Docker web service from
-   `backend/` (or use `render.yaml`), add a persistent disk mounted at `/data`,
-   and set env vars: `LLM_API_KEYS` (2+ real keys), `LLM_MODEL`,
+1. **Backend — Render:** Docker web service built from `backend/Dockerfile`,
+   with env vars `LLM_API_KEYS` (2 Gemini keys), `LLM_MODEL=gemini/gemini-3.6-flash`,
    `DATABASE_URL=sqlite:////data/app.db`, `ENABLE_FAILURE_SIMULATION=true`,
-   `ALLOWED_ORIGINS=<your frontend URL>`.
-2. **Frontend — Vercel/Netlify:** import `frontend/`, set build command
-   `npm run build`, output `dist`, and env `VITE_API_URL=<your backend URL>`.
-3. Put both live URLs in section 1 above, push to a public GitHub repo, and
-   record the 2–3 minute demo (health → live chat → same message in a new
-   session = cache hit → failover with `X-Simulate-Failure` via curl/Postman
-   → history endpoint).
+   `ALLOWED_ORIGINS=*`.
+2. **Frontend — Netlify:** built from `frontend/` (`npm install && npm run build`,
+   publish `frontend/dist`), with env `VITE_API_URL` set to the backend URL
+   above. Site visibility is public.
+3. Model note: `gemini-2.5-flash` is closed to new Google AI Studio users and
+   `gemini-3.8-flash` was returning 503 "high demand" during deployment, so the
+   verified working model `gemini-3.6-flash` is configured. Live calls on the
+   free tier are slow (~1–3 min); cache hits return in a few milliseconds.

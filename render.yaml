@@ -1,0 +1,15 @@
+# Optional one-click backend deploy on Render (frontend: deploy /frontend on Vercel/Netlify)
+services:
+  - type: web
+    name: lyftr-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:////data/app.db
+      - key: ENABLE_FAILURE_SIMULATION
+        value: "true"
+      - key: LLM_MODEL
+        value: gemini/gemini-2.0-flash
+      # Set LLM_API_KEYS and ALLOWED_ORIGINS in the Render dashboard (secret values)
